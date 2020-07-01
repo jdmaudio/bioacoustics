@@ -22,7 +22,6 @@
 #include <vector>
 #include "fft.h"
 #include "bb_tools.h"
-#include <Rcpp.h>
 
 void detect_impl (const std::vector<int> &audio_samples,
                   std::deque<int> &peak_locations,

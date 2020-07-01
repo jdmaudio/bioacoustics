@@ -16,18 +16,20 @@
 //  along with This program. If not, see <https://www.gnu.org/licenses/>.
 //------------------------------------------------------------------------------
 
+
 #include <algorithm>
 #include <deque>
 #include <vector>
-#include <Rcpp.h>
 #include "fft.h"
 #include "bb_audio_event.h"
 #include "bb_detect.h"
 #include "bb_analyse.h"
 #include "bb_extract.h"
+#include "bat_bioacoustics.h"
 
-// [[Rcpp::export]]
-Rcpp::List threshold_detection_impl(
+#include "MatlabDataArray.hpp"
+
+matlab::data::StructArray threshold_detection_impl(
     const std::vector<int>& audio_samples,
     size_t sample_rate,
     size_t threshold,
@@ -50,6 +52,7 @@ Rcpp::List threshold_detection_impl(
     double KME
 )
 {
+  matlab::data::ArrayFactory factory;  
   std::deque<int> peak_locations;
   std::deque< std::vector<double> > background_noises;
 
@@ -58,7 +61,8 @@ Rcpp::List threshold_detection_impl(
   detect_impl(audio_samples, peak_locations, background_noises, sample_rate, threshold, fft, LPF, HPF, dur_t, EDG, NWS);
 
 
-  if (peak_locations.empty()) return(Rcpp::List());
+  if (peak_locations.empty()) 
+	  return factory.createStructArray({ 1,1 }, { "null" });
 
   size_t duration = 0;
   int end = 0;
@@ -128,51 +132,34 @@ Rcpp::List threshold_detection_impl(
     }
   }
 
-  Rcpp::CharacterVector data_names = {
-    "starting_time", "duration", "freq_max_amp", "freq_max", "freq_min",
+  std::vector<std::string> data_names = {"starting_time", "duration", "freq_max_amp", "freq_max", "freq_min",
     "bandwidth", "freq_start", "freq_center", "freq_end", "freq_knee", "fc",
     "freq_bw_knee_fc", "bin_max_amp", "pc_freq_max_amp", "pc_freq_max",
     "pc_freq_min", "pc_knee", "temp_bw_knee_fc", "slope", "kalman_slope",
     "curve_neg", "curve_pos_start", "curve_pos_end", "mid_offset", "snr",
-    "hd", "smoothness"
-  };
+    "hd", "smoothness"};
+  
   size_t n_var = data_names.size();
   n_events = audio_events.size();
-
+  
   if (n_events == 0)
-    return Rcpp::List();
-
-  Rcpp::List event_data(n_var), amp_track(n_events), freq_track(n_events), event_start(n_events), event_end(n_events);
-  event_data.attr("names") = data_names;
-  event_data.attr("class") = "data.frame";
-
-  event_data[0] = Rcpp::StringVector(n_events);
-
-  Rcpp::NumericVector vec(n_events);
-
-  for (size_t i = 1; i < n_var; ++i)
-  {
-    event_data[i] = clone(vec);
-  }
+	  return factory.createStructArray({ 1,1 }, { "null" });
 
 
-  Rcpp::StringVector row_names(n_events);
-
-  for(size_t i = 0; i < n_events; i++)
-  {
-    row_names(i) = std::to_string(i + 1);
-  }
-
-  event_data.attr("row.names") = row_names;
-
-  Rcpp::CharacterVector out_names = { "event_data", "amp_track", "freq_track", "event_start", "event_end" };
-  Rcpp::List out(out_names.size());
-  out.attr("names") = out_names;
-  out["event_data"] = event_data;
-  out["amp_track"] = amp_track;
-  out["freq_track"] = freq_track;
-  out["event_start"] = event_start;
-  out["event_end"] = event_end;
+  matlab::data::StructArray event_data = factory.createStructArray({1,n_var }, data_names);
+  matlab::data::CellArray amp_track = factory.createCellArray({1,n_events});
+  matlab::data::CellArray freq_track = factory.createCellArray({1,n_events});
+  matlab::data::CellArray event_start = factory.createCellArray({1,n_events});
+  matlab::data::CellArray event_end = factory.createCellArray({1,n_events});
+  
+  std::vector<std::string> out_names = { "event_data", "amp_track", "freq_track", "event_start", "event_end" };
+  matlab::data::StructArray out = factory.createStructArray({1,out_names.size()}, out_names);
+  
+  out[0]["event_data"] = event_data;
+  out[0]["amp_track"] = amp_track;
+  out[0]["freq_track"] = freq_track;
+  out[0]["event_start"] = event_start;
+  out[0]["event_end"] = event_end;
 
   for(size_t i = 0; i < n_events; i++)
   {

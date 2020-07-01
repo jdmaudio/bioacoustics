@@ -24,10 +24,13 @@
 #include <string>
 #include <stddef.h>
 #include <vector>
-#include <fftw3.h>
-#include <Rcpp.h>
+#include "../fftw/fftw3.h"
 
-// [[Rcpp::plugins(cpp11)]]
+#include <numeric>
+
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
 
 class FFT
 {

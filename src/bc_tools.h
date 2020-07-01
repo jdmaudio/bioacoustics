@@ -20,7 +20,7 @@
 #define BC_TOOLS_H
 
 #include <cmath>
-#include <Rcpp.h>
+#include <functional>
 
 template <class InputIterator>
 inline

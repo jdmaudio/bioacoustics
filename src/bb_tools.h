@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <functional>
 
 const int ZEROLOG = -120;
 

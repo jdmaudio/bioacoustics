@@ -19,8 +19,8 @@
 #ifndef BB_AUDIO_EVENT_H
 #define BB_AUDIO_EVENT_H
 
-#include <Rcpp.h>
 #include <vector>
+#include <deque>
 
 class Audio_Event
 {
@@ -28,7 +28,8 @@ public:
   size_t duration = 0;
   int end, start;
   double noise = 0, amp_peak = 0, signal = 0;
-  Rcpp::NumericVector amp_track, freq_track, harmonic_amp_track;
+  //matlab::data::Array amp_track, freq_track, harmonic_amp_track;
+  std::deque<double> amp_track, freq_track, harmonic_amp_track;
   std::vector<double> power_spectrum;
 };
 

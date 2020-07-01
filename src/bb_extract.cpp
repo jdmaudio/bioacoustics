@@ -17,7 +17,7 @@
 //------------------------------------------------------------------------------
 
 #include <cmath>
-#include <Rcpp.h>
+#include <algorithm>
 #include "bb_extract.h"
 #include "bb_kalman.h"
 #include "bb_audio_event.h"
@@ -29,7 +29,7 @@ void extract_impl (Audio_Event &audio_event,
                    const size_t &sample_rate,
                    const size_t &fft_size,
                    const size_t &step,
-                   Rcpp::List &out,
+                   matlab::data::StructArray &out,
                    const size_t &index,
                    const double KPE,
                    const double KME)
@@ -67,20 +67,60 @@ void extract_impl (Audio_Event &audio_event,
   }
 
   double bin2freq = (double)sample_rate / (double)(fft_size);
+  
 
   std::transform(freq_track.data.begin(), freq_track.data.end(), freq_track.data.begin(), std::bind(std::multiplies<double>(), bin2freq, std::placeholders::_1));
-  Rcpp::as<Rcpp::List>(out["freq_track"])[index] = freq_track.data;
-  Rcpp::as<Rcpp::List>(out["amp_track"])[index] = amp_track.data;
-  Rcpp::as<Rcpp::StringVector>(Rcpp::as<Rcpp::List>(out["event_data"])["starting_time"])[index] = s2dhmsms((double)audio_event.start / sample_rate);
+   
+  matlab::data::ArrayFactory factory;  
+  
+  //Rcpp::as<Rcpp::List>(out["freq_track"])[index] = freq_track.data;
+  matlab::data::TypedArray<double> D = factory.createArray<double>({ 1, freq_track.data.size() });
+  int i = 0;
+  for (auto e : freq_track.data) {
+      D[i++] = e;
+  }
 
+  matlab::data::CellArray cell1 = out[0]["freq_track"];
+  cell1[0][index] = D;
+  out[0]["freq_track"] = cell1;
+  
+  //Rcpp::as<Rcpp::List>(out["amp_track"])[index] = amp_track.data;
+  D = factory.createArray<double>({ 1, amp_track.data.size() });
+  i = 0;
+  for (auto e : amp_track.data) {
+      D[i++] = e;
+  }
+  matlab::data::CellArray cell2 = out[0]["amp_track"];
+  cell2[0][index] = D;
+  out[0]["amp_track"] = cell2;
+  
+  //Rcpp::as<Rcpp::StringVector>(Rcpp::as<Rcpp::List>(out["event_data"])["starting_time"])[index] = s2dhmsms((double)audio_event.start / sample_rate);
+  matlab::data::StructArray st1 = out[0]["event_data"];
+  auto arr = factory.createCharArray(s2dhmsms((double)audio_event.start / sample_rate));
+  st1[index]["starting_time"] = arr;
+ // out[0]["event_data"] = st1;
+  
   double to_ms = 1000 * step / (double)sample_rate;
   double duration = audio_event.duration * to_ms;
 
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["duration"])[index] = duration;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["snr"])[index] = to_dB(audio_event.signal / no_zero(audio_event.noise));
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["hd"])[index] = to_dB(
-    std::accumulate(harmonic_amp_track.data.begin(), harmonic_amp_track.data.end(), (double)0) /
-      no_zero(std::accumulate(amp_track.data.begin(), amp_track.data.end(), (double)0)));
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["duration"])[index] = duration;
+  D = factory.createArray<double>({ 1, 1 }, { duration });
+  st1[index]["duration"] = D;
+
+ 
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["snr"])[index] = to_dB(audio_event.signal / no_zero(audio_event.noise));
+  D = factory.createArray<double>({ 1,1 }, { to_dB(audio_event.signal / no_zero(audio_event.noise)) });
+  st1[index]["snr"] = D;
+
+   
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["hd"])[index] = to_dB(
+   // std::accumulate(harmonic_amp_track.data.begin(), harmonic_amp_track.data.end(), (double)0) /
+    //  no_zero(std::accumulate(amp_track.data.begin(), amp_track.data.end(), (double)0)));
+   
+  D = factory.createArray<double>({ 1,1 }, { to_dB(std::accumulate(harmonic_amp_track.data.begin(), harmonic_amp_track.data.end(), (double)0) /
+	  no_zero(std::accumulate(amp_track.data.begin(), amp_track.data.end(), (double)0))) });
+  st1[index]["hd"] = D;
+ 
 
   std::vector<double> power_spectrum;
   size_t target_size = 512;
@@ -95,21 +135,45 @@ void extract_impl (Audio_Event &audio_event,
   }
 
   size_t peak = std::distance(power_spectrum.begin(), std::max_element(power_spectrum.begin(), power_spectrum.end()));
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["bin_max_amp"])[index] = quad_interp(power_spectrum, peak) * (double)sample_rate / (double)(target_size * 2);
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["bin_max_amp"])[index] = quad_interp(power_spectrum, peak) * (double)sample_rate / (double)(target_size * 2);
+  D = factory.createArray<double>({ 1,1 }, { quad_interp(power_spectrum, peak) * (double)sample_rate / (double)(target_size * 2) });
+  st1[index]["bin_max_amp"] = D;
+
 
   size_t pos_max_amp = std::distance(amp_track.data.begin(), std::max_element(amp_track.data.begin(), amp_track.data.end()));
   auto bin_max_freq = std::max_element(freq_track.data.begin(), freq_track.data.end());
   auto bin_min_freq = std::min_element(freq_track.data.begin(), freq_track.data.end());
 
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_max_amp"])[index] = freq_track.data[pos_max_amp];
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_max"])[index] = *bin_max_freq;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_min"])[index] = *bin_min_freq;
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_max_amp"])[index] = freq_track.data[pos_max_amp];
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data[pos_max_amp] });
+  st1[index]["freq_max_amp"] = D;
+ 
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_max"])[index] = *bin_max_freq;
+  D = factory.createArray<double>({ 1,1 }, { *bin_max_freq });
+  st1[index]["freq_max"] = D;
+ 
+ // Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_min"])[index] = *bin_min_freq;
+  D = factory.createArray<double>({ 1,1 }, { *bin_min_freq });
+  st1[index]["freq_min"] = D;
+  
   double bandwidth = (*bin_max_freq - *bin_min_freq);
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["bandwidth"])[index] = bandwidth;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_start"])[index] = freq_track.data[0];
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_center"])[index] = freq_track.data[audio_event.duration / 2];
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_end"])[index] = freq_track.data.back();
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["bandwidth"])[index] = bandwidth;
+  D = factory.createArray<double>({ 1,1 }, { bandwidth });
+  st1[index]["bandwidth"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_start"])[index] = freq_track.data[0];
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data[0] });
+  st1[index]["freq_start"] = D;
 
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_center"])[index] = freq_track.data[audio_event.duration / 2];
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data[audio_event.duration / 2] });
+  st1[index]["freq_center"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_end"])[index] = freq_track.data.back();
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data.back() });
+  st1[index]["freq_end"] = D;
+
+  
   double slope = fft_size / 2 * 1000, y, z = 0;
   int j = 0, k = 0;
 
@@ -153,15 +217,43 @@ void extract_impl (Audio_Event &audio_event,
     }
   }
 
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_knee"])[index] = freq_track.data[j];
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["fc"])[index] = freq_track.data[k]; // characteristic frequency
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_bw_knee_fc"])[index] = freq_track.data[j] - freq_track.data[k];
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["temp_bw_knee_fc"])[index] = (j - k) * to_ms;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_freq_max_amp"])[index] = (double)pos_max_amp / audio_event.duration * 100;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_freq_max"])[index] = (double)std::distance(freq_track.data.begin(), bin_max_freq) / audio_event.duration * 100;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_freq_min"])[index] = (double)std::distance(freq_track.data.begin(), bin_min_freq) / audio_event.duration * 100;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_knee"])[index] = (double)j / audio_event.duration * 100;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["slope"])[index] = bandwidth / duration;
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_knee"])[index] = freq_track.data[j];
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data[j] });
+  st1[index]["freq_knee"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["fc"])[index] = freq_track.data[k]; // characteristic frequency
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data[k] });
+  st1[index]["fc"] = D;
+
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["freq_bw_knee_fc"])[index] = freq_track.data[j] - freq_track.data[k];
+  D = factory.createArray<double>({ 1,1 }, { freq_track.data[j] - freq_track.data[k] });
+  st1[index]["freq_bw_knee_fc"] = D;
+
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["temp_bw_knee_fc"])[index] = (j - k) * to_ms;
+  D = factory.createArray<double>({ 1,1 }, { (j - k) * to_ms });
+  st1[index]["temp_bw_knee_fc"] = D;
+
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_freq_max_amp"])[index] = (double)pos_max_amp / audio_event.duration * 100;
+  D = factory.createArray<double>({ 1,1 }, { (double)pos_max_amp / audio_event.duration * 100 });
+  st1[index]["pc_freq_max_amp"] = D;
+
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_freq_max"])[index] = (double)std::distance(freq_track.data.begin(), bin_max_freq) / audio_event.duration * 100;
+  D = factory.createArray<double>({ 1,1 }, { (double)std::distance(freq_track.data.begin(), bin_max_freq) / audio_event.duration * 100 });
+  st1[index]["pc_freq_max"] = D;
+
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_freq_min"])[index] = (double)std::distance(freq_track.data.begin(), bin_min_freq) / audio_event.duration * 100;
+  D = factory.createArray<double>({ 1,1 }, { (double)std::distance(freq_track.data.begin(), bin_min_freq) / audio_event.duration * 100 });
+  st1[index]["pc_freq_min"] = D;
+
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["pc_knee"])[index] = (double)j / audio_event.duration * 100;
+  D = factory.createArray<double>({ 1,1 }, { (double)j / audio_event.duration * 100 });
+  st1[index]["pc_knee"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["slope"])[index] = bandwidth / duration;
+  D = factory.createArray<double>({ 1,1 }, { bandwidth / duration });
+  st1[index]["slope"] = D;
+
+  
   std::vector<int> zero2n (freq_track.data.size());
   std::iota(zero2n.begin(), zero2n.end(), 0);
   std::vector<double> lm_fit = linear_model(zero2n, freq_track.data);
@@ -189,13 +281,41 @@ void extract_impl (Audio_Event &audio_event,
     }
   }
 
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["curve_neg"])[index] = curve_neg;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["curve_pos_start"])[index] = curve_pos_start;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["curve_pos_end"])[index] = curve_pos_end;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["mid_offset"])[index] = (sample_at(lm_fit, .5) - sample_at(freq_track.data, .5));
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["kalman_slope"])[index] = (sample_at(lm_fit, 0) - sample_at(lm_fit, 1)) / duration;
-  Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["smoothness"])[index] = smoothness(freq_track.data);
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["curve_neg"])[index] = curve_neg;
+  D = factory.createArray<double>({ 1,1 }, { curve_neg });
+  st1[index]["curve_neg"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["curve_pos_start"])[index] = curve_pos_start;
+  D = factory.createArray<double>({ 1,1 }, { curve_pos_end });
+  st1[index]["curve_pos_start"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["curve_pos_end"])[index] = curve_pos_end;
+  D = factory.createArray<double>({ 1,1 }, { curve_pos_end });
+  st1[index]["curve_pos_end"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["mid_offset"])[index] = (sample_at(lm_fit, .5) - sample_at(freq_track.data, .5));
+  D = factory.createArray<double>({ 1,1 }, { (sample_at(lm_fit, .5) - sample_at(freq_track.data, .5)) });
+  st1[index]["mid_offset"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["kalman_slope"])[index] = (sample_at(lm_fit, 0) - sample_at(lm_fit, 1)) / duration;
+  D = factory.createArray<double>({ 1,1 }, { (sample_at(lm_fit, 0) - sample_at(lm_fit, 1)) / duration });
+  st1[index]["kalman_slope"] = D;
+  
+  //Rcpp::as<Rcpp::NumericVector>(Rcpp::as<Rcpp::List>(out["event_data"])["smoothness"])[index] = smoothness(freq_track.data);
+  D = factory.createArray<double>({ 1,1 }, { smoothness(freq_track.data) });
+  st1[index]["smoothness"] = D;
+  
+  //Rcpp::as<Rcpp::List>(out["event_start"])[index] = audio_event.start + 1; // R index starts at 1
+  matlab::data::TypedArray<int> Q = factory.createArray<int>({ 1, 1 }, { audio_event.start + 1 });
+  matlab::data::CellArray cell3 = out[0]["event_start"];
+  cell3[0][index] = Q;
+  out[0]["event_start"] = cell3;
 
-  Rcpp::as<Rcpp::List>(out["event_start"])[index] = audio_event.start + 1; // R index starts at 1
-  Rcpp::as<Rcpp::List>(out["event_end"])[index] = audio_event.end + 1;     // R index starts at 1
+  //Rcpp::as<Rcpp::List>(out["event_end"])[index] = audio_event.end + 1;     // R index starts at 1
+  Q = factory.createArray<int>({ 1, 1 }, { audio_event.end + 1 });
+  matlab::data::CellArray cell4 = out[0]["event_end"];
+  cell4[0][index] = Q;
+  out[0]["event_end"] = cell4;
+
+  out[0]["event_data"] = st1;
 }

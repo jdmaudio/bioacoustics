@@ -19,15 +19,16 @@
 #ifndef BB_EXTRACT_H
 #define BB_EXTRACT_H
 
-#include <Rcpp.h>
 #include "fft.h"
 #include "bb_audio_event.h"
+
+#include "MatlabDataArray.hpp"
 
 void extract_impl (Audio_Event &audio_event,
                    const size_t &sample_rate,
                    const size_t &fft_size,
                    const size_t &step,
-                   Rcpp::List &out,
+                   matlab::data::StructArray &out,
                    const size_t &index,
                    const double KPE,
                    const double KME);

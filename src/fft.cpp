@@ -80,7 +80,7 @@ FFT::WIN_TYPE fft_win_str_to_enum(std::string s)
   {
     win_type = FFT::WIN_TYPE::BLACKMAN_HARRIS_7;
   }
-  else Rcpp::stop("This type of window is not implemented.");
+  //else Rcpp::stop("This type of window is not implemented.");
 
   return win_type;
 }
